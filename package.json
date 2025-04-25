@@ -1,6 +1,7 @@
 {
-  "name": "onprover-bot",
+  "name": "oro-bot",
   "version": "1.0.0",
+  "description": "Bot otomatis untuk Orochi Network",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

@@ -1,54 +1,81 @@
-const { chromium } = require('playwright'); // pastikan playwright sudah diinstall
+const { chromium } = require('playwright');
 
-(async () => {
-  const browser = await chromium.launch({ headless: true }); // headless true
-  const context = await browser.newContext({
-    cookies: [
-      {
-        name: '_ga',
-        value: 'GA1.1.1386342769.1745285362',
-        domain: 'onprover.orochi.network',
-        path: '/',
-        httpOnly: false,
-        secure: true,
-        sameSite: 'Lax',
-      },
-      {
-        name: 'cf_clearance',
-        value: 'rs2HXb0ekc0pvT4abdpEXBXxEbBCQzrUFkcpvt.KM5c-1745614133-1.2.1.1-yl6o59vY46E.uzV8UZlqKRDsC78PVyGcTyXBZFTEUnrGbJ0ufh3TwdXvJJFay7ZPPBSPXD7dZSSjUNrp0t4bHq5foRc7pg60RNG1wMJLUhVjO7wCHotndJbnAcfo4KdGjaRYgi9TAC9Or717vhhCuigewQyI26bWpbr1OOmQrKfGEQA25ZGLWGFeVvaWcdFjGZUO6IWmyzgBPUx3IACwvumtsqe9cz.phqyJmVB_YnzwCxmLtLuBRm9ugSOAFGFfBJSxpGNsVx5JV6wFrgKM_BjEu5AL6DAHhCk5t4RmpzFxAx5l3CqytNfjJpESAnNSFh9L9NHR8geNUDIvqlZlLgYqD9dYJCGkm7ELCVmwXWLIYoxXz1f76aPHI.KLoVu',
-        domain: 'onprover.orochi.network',
-        path: '/',
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-      },
-      {
-        name: 'accessToken',
-        value: 'eyJhbGciOiJIUzI1NiJ9.eyJ1dWlkIjoiMTU3N2ZhODgtYTU1Ni00MzhjLWFkOWQtNDc2YTk2NjEyODVmIiwidXNlcm5hbWUiOiIweDdhNWU0ODE3MzQ2OGE1NzU2ZWY3OGQzZDliMGI4ZGYyMzczMTJjNTciLCJpZCI6IjE4MDc4MiIsImJhblVudGlsIjpudWxsLCJzaWQiOiI1NzA2MTk3NC0xMzRjLTQ5NjktYmVlMi0xZGIyMzAxYTdiMmMiLCJleHAiOjE3NDgyMDYxNzd9.2rSXZXeuNmbtTkcMScpWzQtLU2ogFPYiSmdpxIqm_Rw',
-        domain: 'onprover.orochi.network',
-        path: '/',
-        httpOnly: false,
-        secure: true,
-        sameSite: 'Lax',
-      }
-    ]
+const rawCookie = process.env.COOKIE;
+
+let cookies = [];
+
+try {
+  const parts = rawCookie.split(';').map(c => c.trim());
+  cookies = parts.map(cookieStr => {
+    const [name, ...valParts] = cookieStr.split('=');
+    const value = valParts.join('=');
+
+    if (!name || !value) return null;
+
+    return {
+      name: name,
+      value: value,
+      domain: "onprover.orochi.network",
+      path: "/"
+    };
+  }).filter(Boolean);
+} catch (err) {
+  console.error("Gagal parsing COOKIE:", err.message);
+  process.exit(1);
+}
+
+let isFirstRun = true;
+
+async function startBot() {
+  const browser = await chromium.launch({
+    headless: true
   });
+  const context = await browser.newContext();
+  await context.addCookies(cookies);
 
   const page = await context.newPage();
-  await page.goto('https://onprover.orochi.network', { waitUntil: 'domcontentloaded' });
+  await page.goto("https://onprover.orochi.network", { waitUntil: "domcontentloaded" });
 
-  console.log('Sudah masuk, mencoba klik tombol PROVER...');
+  console.log("[+] Halaman dimuat, memeriksa tombol...");
 
   try {
     await page.waitForSelector('button', { timeout: 10000 });
-    await page.click('button');
-    console.log('Tombol sudah diklik.');
-  } catch (e) {
-    console.error('Gagal menemukan tombol:', e);
+    const buttons = await page.$$('button');
+
+    for (const btn of buttons) {
+      const text = await btn.innerText();
+      const lower = text.toLowerCase();
+
+      if (isFirstRun && lower.includes("start")) {
+        console.log(`[+] Menekan tombol Start: ${text}`);
+        await btn.click();
+        isFirstRun = false;
+        break;
+      }
+
+      if (!isFirstRun && lower.includes("claim")) {
+        console.log(`[+] Menekan tombol Claim: ${text}`);
+        await btn.click();
+        break;
+      }
+    }
+  } catch (err) {
+    console.log("[-] Tidak menemukan tombol yang sesuai, atau error:", err.message);
   }
 
-  console.log('Skrip akan tetap jalan...');
-
-  await page.waitForTimeout(600000); // tunggu 10 menit (biar sesi tidak mati cepat)
+  await page.waitForTimeout(5000);
   await browser.close();
+  console.log("[+] Selesai satu siklus. Akan jalan ulang dalam 1 jam...");
+}
+
+// Loop tiap 1 jam
+(async () => {
+  while (true) {
+    try {
+      await startBot();
+    } catch (err) {
+      console.error("[!] Error saat menjalankan bot:", err.message);
+    }
+    await new Promise(resolve => setTimeout(resolve, 3600000)); // 1 jam
+  }
 })();

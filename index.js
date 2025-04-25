@@ -26,7 +26,8 @@ try {
 
 async function startBot() {
   const browser = await chromium.launch({
-    headless: true
+    headless: false, // JANGAN headless, biar kelihatan browser terbuka
+    timeout: 60000,
   });
   const context = await browser.newContext();
   await context.addCookies(cookies);
@@ -37,7 +38,7 @@ async function startBot() {
   console.log("[+] Halaman dimuat, mencari tombol PROVER...");
 
   try {
-    await page.waitForSelector('button, [role="button"], a', { timeout: 20000 }); // lebih fleksibel cari tombol
+    await page.waitForSelector('button, [role="button"], a', { timeout: 20000 });
     const buttons = await page.$$('button, [role="button"], a');
 
     for (const btn of buttons) {
@@ -53,12 +54,33 @@ async function startBot() {
     }
   } catch (err) {
     console.error("[-] Gagal menemukan tombol PROVER:", err.message);
+    await browser.close();
+    return;
   }
 
-  console.log("[+] Selesai klik PROVER. Menutup browser...");
-  await page.waitForTimeout(5000); // kasih delay 5 detik biar proses aman
-  await browser.close();
-  console.log("[+] Bot selesai.");
+  console.log("[+] Menunggu proses Proving selesai...");
+
+  try {
+    // Tunggu proof muncul
+    await page.waitForSelector('text=Your Proof Logs', { timeout: 30000 });
+    await page.waitForFunction(() => {
+      const logTable = document.querySelector('table');
+      if (!logTable) return false;
+      return logTable.innerText.includes('Success') || logTable.innerText.includes('Completed');
+    }, { timeout: 120000 });
+
+    console.log("[+] Proof selesai! Data berhasil dibuat.");
+    const latestProof = await page.locator('table tr:nth-child(2)').innerText();
+    console.log("[+] Proof Terbaru:", latestProof);
+
+  } catch (err) {
+    console.error("[-] Gagal menunggu proof selesai:", err.message);
+  }
+
+  console.log("[+] Membiarkan browser tetap terbuka 24 jam...");
+
+  // Biar browser tetap terbuka 24 jam
+  await new Promise(resolve => setTimeout(resolve, 24 * 60 * 60 * 1000)); // 24 jam dalam milidetik
 }
 
 startBot();

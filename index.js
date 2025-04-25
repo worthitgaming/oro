@@ -1,76 +1,75 @@
-// File: index.js
 const puppeteer = require("puppeteer");
 
 // Ambil cookie dari environment variable
 const rawCookie = process.env.COOKIE;
 let cookies;
 try {
-  cookies = JSON.parse(rawCookie);
+  // Deteksi jika COOKIE masih string literal atau sudah array
+  cookies = Array.isArray(JSON.parse(rawCookie))
+    ? JSON.parse(rawCookie)
+    : JSON.parse(JSON.parse(rawCookie));
 } catch (err) {
-  console.error("Gagal parsing COOKIE. Pastikan format JSON satu baris valid.");
-  process.exit(1);
+  console.error("Gagal parsing COOKIE. Pastikan format JSON satu baris valid.");
+  process.exit(1);
 }
 
 let isFirstRun = true;
 
 async function startBot() {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"]
-  });
-  const page = await browser.newPage();
+  console.log(`\n[${new Date().toLocaleString()}] Memulai siklus baru...`);
 
-  // Set cookie agar langsung login
-  await page.setCookie(...cookies);
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+  });
+  const page = await browser.newPage();
 
-  await page.goto("https://onprover.orochi.network", { waitUntil: "networkidle2" });
+  try {
+    await page.setCookie(...cookies);
+    await page.goto("https://onprover.orochi.network", {
+      waitUntil: "networkidle2",
+      timeout: 30000
+    });
 
-  console.log("[+] Halaman dimuat, memeriksa tombol...");
+    console.log("[+] Halaman dimuat, memeriksa tombol...");
 
-  // Klik tombol "Start Proving" jika ini adalah run pertama
-  try {
-    if (isFirstRun) {
-      await page.waitForSelector("button", { timeout: 10000 });
-      const buttons = await page.$$('button');
-      for (let btn of buttons) {
-        const text = await page.evaluate(el => el.innerText, btn);
-        if (text.toLowerCase().includes("start")) {
-          console.log(`[+] Menekan tombol Start: ${text}`);
-          await btn.click();
-          break;
-        }
-      }
-      isFirstRun = false;
-    } else {
-      // Setelah 24 jam, hanya klik tombol "Claim" jika tersedia
-      await page.waitForSelector("button", { timeout: 10000 });
-      const buttons = await page.$$('button');
-      for (let btn of buttons) {
-        const text = await page.evaluate(el => el.innerText, btn);
-        if (text.toLowerCase().includes("claim")) {
-          console.log(`[+] Menekan tombol Claim: ${text}`);
-          await btn.click();
-          break;
-        }
-      }
-    }
-  } catch (err) {
-    console.log("[-] Tidak menemukan tombol yang sesuai, atau error: ", err.message);
-  }
+    await page.waitForSelector("button", { timeout: 10000 });
+    const buttons = await page.$$('button');
 
-  await page.waitForTimeout(5000); // tunggu 5 detik
-  await browser.close();
-  console.log("[+] Selesai satu siklus. Akan jalan ulang dalam 1 jam...");
+    for (let btn of buttons) {
+      const text = await page.evaluate(el => el.innerText, btn);
+      const lowerText = text.toLowerCase();
+
+      if (isFirstRun && lowerText.includes("start")) {
+        console.log(`[+] Menekan tombol Start: ${text}`);
+        await btn.click();
+        isFirstRun = false;
+        break;
+      }
+
+      if (!isFirstRun && lowerText.includes("claim")) {
+        console.log(`[+] Menekan tombol Claim: ${text}`);
+        await btn.click();
+        break;
+      }
+    }
+  } catch (err) {
+    console.log("[-] Tidak menemukan tombol yang sesuai, atau error:", err.message);
+  }
+
+  await page.waitForTimeout(5000);
+  await browser.close();
+  console.log("[+] Selesai satu siklus. Akan jalan ulang dalam 1 jam...");
 }
 
-// Loop selamanya tiap 1 jam
+// Loop tiap 1 jam
 (async () => {
-  while (true) {
-    try {
-      await startBot();
-    } catch (err) {
-      console.error("[!] Error saat menjalankan bot:", err.message);
-    }
-    await new Promise(resolve => setTimeout(resolve, 3600000)); // 1 jam
-  }
+  while (true) {
+    try {
+      await startBot();
+    } catch (err) {
+      console.error("[!] Error saat menjalankan bot:", err.message);
+    }
+    await new Promise(resolve => setTimeout(resolve, 3600000)); // 1 jam
+  }
 })();

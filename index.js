@@ -26,7 +26,7 @@ try {
 
 async function startBot() {
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     timeout: 60000,
   });
   const context = await browser.newContext();

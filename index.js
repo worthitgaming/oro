@@ -26,7 +26,7 @@ try {
 
 async function startBot() {
   const browser = await chromium.launch({
-    headless: false, // JANGAN headless, biar kelihatan browser terbuka
+    headless: false,
     timeout: 60000,
   });
   const context = await browser.newContext();
@@ -61,26 +61,37 @@ async function startBot() {
   console.log("[+] Menunggu proses Proving selesai...");
 
   try {
-    // Tunggu proof muncul
-    await page.waitForSelector('text=Your Proof Logs', { timeout: 30000 });
+    await page.waitForSelector('text=Your Proof Logs', { timeout: 60000 });
+    console.log("[+] Bagian Proof Logs ditemukan, memonitor...");
+
     await page.waitForFunction(() => {
-      const logTable = document.querySelector('table');
-      if (!logTable) return false;
-      return logTable.innerText.includes('Success') || logTable.innerText.includes('Completed');
+      const tableRows = document.querySelectorAll('table tr');
+      return tableRows.length > 1; // berarti sudah ada data proof baru
     }, { timeout: 120000 });
 
-    console.log("[+] Proof selesai! Data berhasil dibuat.");
-    const latestProof = await page.locator('table tr:nth-child(2)').innerText();
-    console.log("[+] Proof Terbaru:", latestProof);
+    console.log("[+] Proof berhasil! Menampilkan data terbaru...");
+
+    // Ambil data LATEST PROOF
+    const proofRow = await page.$('table tr:nth-child(2)');
+    const cells = await proofRow.$$('td');
+
+    const latestProof = await cells[0].innerText();
+    const createAt = await cells[1].innerText();
+    const status = await cells[2].innerText();
+
+    console.log("====== LATEST PROOF ======");
+    console.log("Proof ID :", latestProof);
+    console.log("Created  :", createAt);
+    console.log("Status   :", status);
+    console.log("==========================");
 
   } catch (err) {
-    console.error("[-] Gagal menunggu proof selesai:", err.message);
+    console.error("[-] Gagal mengambil proof terbaru:", err.message);
   }
 
   console.log("[+] Membiarkan browser tetap terbuka 24 jam...");
 
-  // Biar browser tetap terbuka 24 jam
-  await new Promise(resolve => setTimeout(resolve, 24 * 60 * 60 * 1000)); // 24 jam dalam milidetik
+  await new Promise(resolve => setTimeout(resolve, 24 * 60 * 60 * 1000)); // 24 jam
 }
 
 startBot();

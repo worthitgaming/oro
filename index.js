@@ -2,15 +2,22 @@ const puppeteer = require("puppeteer");
 
 // Ambil cookie dari environment variable
 const rawCookie = process.env.COOKIE;
-let cookies;
+let cookies = [];
+
 try {
-  if (rawCookie.trim().startsWith('[')) {
-    cookies = JSON.parse(rawCookie);
-  } else {
-    cookies = JSON.parse(JSON.parse(rawCookie));
-  }
+  const parts = rawCookie.split(';').map(c => c.trim());
+  cookies = parts.map(cookieStr => {
+    const [name, ...valParts] = cookieStr.split('=');
+    const value = valParts.join('=');
+    return {
+      name: name,
+      value: value,
+      domain: "onprover.orochi.network",
+      path: "/"
+    };
+  });
 } catch (err) {
-  console.error("Gagal parsing COOKIE. Pastikan format JSON satu baris valid.");
+  console.error("Gagal parsing COOKIE:", err.message);
   console.error("Isi COOKIE yang diterima:", rawCookie);
   process.exit(1);
 }
@@ -18,53 +25,54 @@ try {
 let isFirstRun = true;
 
 async function startBot() {
-  console.log(`\n[${new Date().toLocaleString()}] Memulai siklus baru...`);
-
   const browser = await puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });
   const page = await browser.newPage();
 
+  // Set cookie agar langsung login
+  await page.setCookie(...cookies);
+
+  await page.goto("https://onprover.orochi.network", { waitUntil: "networkidle2" });
+
+  console.log("[+] Halaman dimuat, memeriksa tombol...");
+
   try {
-    await page.setCookie(...cookies);
-    await page.goto("https://onprover.orochi.network", {
-      waitUntil: "networkidle2",
-      timeout: 30000
-    });
-
-    console.log("[+] Halaman dimuat, memeriksa tombol...");
-
-    await page.waitForSelector("button", { timeout: 10000 });
-    const buttons = await page.$$('button');
-
-    for (let btn of buttons) {
-      const text = await page.evaluate(el => el.innerText, btn);
-      const lowerText = text.toLowerCase();
-
-      if (isFirstRun && lowerText.includes("start")) {
-        console.log(`[+] Menekan tombol Start: ${text}`);
-        await btn.click();
-        isFirstRun = false;
-        break;
+    if (isFirstRun) {
+      await page.waitForSelector("button", { timeout: 10000 });
+      const buttons = await page.$$('button');
+      for (let btn of buttons) {
+        const text = await page.evaluate(el => el.innerText, btn);
+        if (text.toLowerCase().includes("start")) {
+          console.log(`[+] Menekan tombol Start: ${text}`);
+          await btn.click();
+          break;
+        }
       }
-
-      if (!isFirstRun && lowerText.includes("claim")) {
-        console.log(`[+] Menekan tombol Claim: ${text}`);
-        await btn.click();
-        break;
+      isFirstRun = false;
+    } else {
+      await page.waitForSelector("button", { timeout: 10000 });
+      const buttons = await page.$$('button');
+      for (let btn of buttons) {
+        const text = await page.evaluate(el => el.innerText, btn);
+        if (text.toLowerCase().includes("claim")) {
+          console.log(`[+] Menekan tombol Claim: ${text}`);
+          await btn.click();
+          break;
+        }
       }
     }
   } catch (err) {
     console.log("[-] Tidak menemukan tombol yang sesuai, atau error:", err.message);
   }
 
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(5000); // tunggu 5 detik
   await browser.close();
   console.log("[+] Selesai satu siklus. Akan jalan ulang dalam 1 jam...");
 }
 
-// Loop tiap 1 jam
+// Loop selamanya tiap 1 jam
 (async () => {
   while (true) {
     try {
